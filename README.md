@@ -7,6 +7,7 @@
 $i=0;
 
 $bunny['rebuildglobalwhitelistcommand']="/scripts/rebuild_whitelist.sh";
+$bunny['maxTimeBack']=1800;
 
 $i++;
 $configuration[$i]['label']="dovecotpostfix";
@@ -65,6 +66,8 @@ LOGBUNNY/data.openssh
 </pre>
 
 <h3>$bunny['rebuildglobalwhitelistcommand']</h3> <p>can point to whatever executable to be run just before STEP2 does its action-running work</h3>
+
+<h3>$bunny['maxTimeBack']</h3> <p>is the max amount of seconds we can look in the past, every log line that refers to an earlier time is discarded -- 0 means disabled</h3>
 
 <h3>hits.count</h3> <p>contains filenames whose name is IP, content is last hit time and number of hits -- when hit number is more than threshold, the file is moved to list.offenders</p>
 

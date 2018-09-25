@@ -1,6 +1,6 @@
 <?php
 
-//Logbunny v0.881
+//Logbunny v0.89
 //Devs: pbologna at sitook.com -- kirsten at sitook.com
 
 //$mytag="dovecotpostfix";
@@ -18,7 +18,7 @@ foreach ($configuration as $oneconf)
 {
         if ($oneconf['enabled']!==TRUE) {continue;}
 	checkTree($oneconf,$DEBUG,$DEBUGFOLDER);
-	scanWithConfiguration($oneconf,$DEBUG,$DEBUGFOLDER);
+	scanWithConfiguration($oneconf,$bunny,$DEBUG,$DEBUGFOLDER);
 }
 
 function checkTree($oneconf,$DEBUG,$DEBUGFOLDER)
@@ -41,13 +41,15 @@ function checkTree($oneconf,$DEBUG,$DEBUGFOLDER)
 	}
 }
 
-function scanWithConfiguration($oneconf,$DEBUG,$DEBUGFOLDER)
+function scanWithConfiguration($oneconf,$bunny,$DEBUG,$DEBUGFOLDER)
 {
 	$mytag=$oneconf['label'];
 	$patterns=$oneconf['patterns'];
 	$file2parse=$oneconf['file'];
 	$threshold=$oneconf['threshold'];
 	$expiryhits=$oneconf['expiryhits'];
+	$maxTimeBack=$bunny['maxTimeBack'];
+	$workablefile=1;
 
 	$lasttimestamp="0";
 	$lastline="";
@@ -74,6 +76,7 @@ function scanWithConfiguration($oneconf,$DEBUG,$DEBUGFOLDER)
 	}
 	
 	$inc=0;
+	$fsize=filesize($file2parse);
 	$fp=fopen($file2parse,"r");
 	echo "Searching for head...";
 	$timepat="/(?P<timestamp>\S+.\S+.\S+)/";
@@ -81,6 +84,7 @@ function scanWithConfiguration($oneconf,$DEBUG,$DEBUGFOLDER)
 	$headskip=0;
 	$linenumber=-1;
 	$firshlinehash="";
+
 	while(!feof($fp))
 	{
 		$linenumber++;
@@ -106,11 +110,26 @@ function scanWithConfiguration($oneconf,$DEBUG,$DEBUGFOLDER)
 			if ($hash1stLine==$lasthash)
 			{
 				//this is the file meant to be headcut
-				//so we can skip to the saved position
-				$linenumber=$lastlinenumber;
-				fseek($fp,$lastposition);
-				echo "This was the file with saved position -- let's go to byte $lastposition (line $linenumber)\n";
-				break;
+				//so we can skip to the saved position if filesize allows that
+				if ($fsize>$lastposition)
+				{
+					$linenumber=$lastlinenumber;
+					fseek($fp,$lastposition);
+					echo "This was the file with saved position -- let's go to byte $lastposition (line $linenumber)\n";
+					break;
+				}
+				else if ($fsize<$lastposition)
+				{
+					echo "This file has been truncated! Same header, different length! -- aborting\n";
+					$workablefile=0;
+					break;
+				}
+				else if ($fsize==$lastposition)
+				{
+					echo "Filesize ($fsize) unchanged since last scan ($lastposition) -- aborting\n";
+					$workablefile=0;
+					break;
+				}
 			}
 			else
 			{
@@ -130,7 +149,7 @@ function scanWithConfiguration($oneconf,$DEBUG,$DEBUGFOLDER)
 			{
 				//this line is already after the meant headcut
 				//lets rollback
-				echo "File starts after saved position -- No Headcut at all\n";
+				echo "We are already after saved position ($time vs $lasttimestamp)\n";
 				fseek($fp,$prevPos);
 				$lastline=-1;
 				break;
@@ -148,35 +167,68 @@ function scanWithConfiguration($oneconf,$DEBUG,$DEBUGFOLDER)
 			// "cant get timestamp at this line - lets skip
 			continue;
 		}
-		if ($inc%1500==0)
+		if ($linenumber%1500==0)
 		{
 			echo ".";
-			$inc=0;
 		}
 		$headskip++;
-	}
+	} // while(!feof($fp))
 	
+
+	
+	if ($workablefile==0)
+	{
+		//file marked as not workable
+		//maybe unchanged! -- maybe truncated!
+		return FALSE;
+	}
+
+
+        while(!feof($fp))
+        {
+                $linenumber++;
+		$prevPos=ftell($fp);
+                $line = fgets($fp, 4096);
+                if (preg_match($timepat,$line,$matches))
+                {
+                        $time=strtotime($matches['timestamp']);
+                        if (time()-$time<$maxTimeBack)
+                        {
+				echo "MaxTimeBack in action brought you this line: **$linenumber**\n";
+				//lets roll back so that we provide with this line on next procedure
+                        	fseek($fp,$prevPos);
+                                break;
+                        }
+                        else
+                        {
+				if ($linenumber%15000==0)
+				{
+                                	echo "MaxTimeBack in action -- skipping $linenumber\n";
+				}
+				//lets go next
+				continue;
+                        }
+                }
+	}
+
+
+	//LINE SCANNING STARTS HERE
+	$lastline="";
 	echo "After headcut we are at line $linenumber\n";
 	$matched=0;
-/*
-		$pattern1="/(?P<timestamp>\S+.\S+.\S+).\S+.dovecot: auth-worker\(\d+\): (pam|sql)\(\S+,(?P<ip>\S+)\): (Password mismatch|unknown user)/";
-		$pattern2="/(?P<timestamp>\S+.\S+.\S+).\S+.(postfix\/submission\/smtpd|postfix\/smtpd)\[\d+\]: warning: \S+\[(?P<ip>\S+)\]: SASL PLAIN authentication failed/";
-		$patterns=array(
-				$pattern1,
-				$pattern2
-			);
-*/
-
-
-//LINE SCANNING STARTS HERE
 	while(!feof($fp))
 	{
 		$linenumber++;
 		$line = fgets($fp, 4096);
+		if (strlen($line)!=0)
+		{
+			$lastline=$line;
+		}
+	//	echo "while loop with lastline=**$lastline**\n";
 	//	^%(__prefix_line)sauth-worker\(\d+\): (pam|sql)\(\S+,<HOST>\): (Password mismatch|unknown user)\s*$
 	//	Sep 24 14:37:22 mx01 dovecot: auth-worker(8533): sql(pbologna@sitook.com,178.219.125.21): Password mismatch
-	
-	
+
+
 		$foundMatch=0;
 		$currentpat=-1;
 		foreach ($patterns as $onepat)
@@ -188,18 +240,22 @@ function scanWithConfiguration($oneconf,$DEBUG,$DEBUGFOLDER)
 				break;
 			}
 		}
-	
+
 		if ($foundMatch==0)
 		{
 			$currentpat=-1;
 			//if not matching,
 			//write one timestamp every 1500 lines so that on next run we are not going to rescan
+			if ($linenumber%1000==0)
+			{
+				echo ".";
+			}
 			if ($linenumber%10000==0)
 			{
 				if (preg_match($timepat,$line,$matches))
 				{
 					$time=strtotime($matches['timestamp']);
-					writeLastTimestamp($file2parse,$time,$mytag,$line,$linenumber,$hash1stLine,$fp);
+					writeLastTimestamp($file2parse,$time,$mytag,$line,$linenumber,$hash1stLine,$fp,$timepat,__LINE__);
 				}
 			}
 			continue;
@@ -208,27 +264,20 @@ function scanWithConfiguration($oneconf,$DEBUG,$DEBUGFOLDER)
 		{
 			$reason="matched".$currentpat;
 		}
-	
+
 		$matched++;
 		echo "------------------------\n\n\ncurrentpat:".$currentpat."\n";
 		echo "MATCHED: ".$line."\n";
 		echo "\n\n";
 		$time=strtotime($matches['timestamp']);
-		writeLastTimestamp($file2parse,$time,$mytag,$line,$linenumber,$hash1stLine,$fp);
+		writeLastTimestamp($file2parse,$time,$mytag,$line,$linenumber,$hash1stLine,$fp,$timepat,__LINE__);
 		print_r($matches);
 		if($DEBUG==1 && $matched==2)
 		{
 			die("\ndebug stops after 2 matched\n");
 		}
 		//die("xxx");
-	
 	   $timestamp=$matches['timestamp'];
-	   if ($lasttimestamp>$timestamp)
-	   {
-		//skipping as already processed
-		$inc++;
-	   }
-	
 	   if ($reason=="")
 	   {
 		print_r($vars);
@@ -236,27 +285,34 @@ function scanWithConfiguration($oneconf,$DEBUG,$DEBUGFOLDER)
 		//we have no reason to count
 		continue;
 	   }
-	
 	   if (!addHitCount($matches["ip"],$matches["timestamp"],$DEBUGFOLDER,$mytag,$threshold,$expiryhits))
 	   {
 	      // count is not enough - mark new hit and ignore
 	      continue;
 	   }
-	
 	   $fp2=fopen("/scripts/LOGBUNNY/data.".$mytag.$DEBUGFOLDER."/list.offenders/".$matches["ip"],"a+");
 	   fputs($fp2,$reason);
 	   fclose($fp2);
 	   //print_r($vars);
-	
 	} //end of while
+
+	writeLastTimestamp($file2parse,"",$mytag,$lastline,$linenumber,$hash1stLine,$fp,$timepat,__LINE__);
 	fclose($fp);
 } // End of scanWithConfiguration
 
-function writeLastTimestamp($file2parse,$time,$mytag,$line,$linenumber,$hash1stLine,$fp)
+function writeLastTimestamp($file2parse,$time,$mytag,$line,$linenumber,$hash1stLine,$fp,$timepat,$caller)
 {
+//	echo "Entering writeLastTimestamp with line=**$line**";
+	if ($time=="")
+	{
+		if (preg_match($timepat,$line,$matches))
+		{
+			$time=strtotime($matches['timestamp']);
+		}
+	}
 	$line=trim($line);
 	$pos=ftell($fp);
-	echo "marking ".$file2parse.".done.".$mytag." with ".$time." (".date("M-d-Y H:i:s",$time).")\n";
+	echo "marking ".$file2parse.".done.".$mytag." with ".$time." (".date("M-d-Y H:i:s",$time).") -- $caller\n";
 	$fp=fopen($file2parse.".done.".$mytag,"w");
 	fputs($fp,$time."\n".$line."\n".$linenumber."\n".$hash1stLine."\n".$pos);
 	fclose($fp);
