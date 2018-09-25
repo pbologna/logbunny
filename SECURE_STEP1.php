@@ -1,66 +1,147 @@
 <?php
+
+//Logbunny v0.88
+//Devs: pbologna at sitook.com -- kirsten at sitook.com
+
 //$mytag="dovecotpostfix";
-$DEBUG=1;
+$DEBUG=0;
 $DEBUGFOLDER="";
 include ("config.php");
 
+if ($DEBUG==1)
+{
+	$DEBUGFOLDER=".debug";
+}
+
+
 foreach ($configuration as $oneconf)
 {
+        if ($oneconf['enabled']!==TRUE) {continue;}
+	checkTree($oneconf,$DEBUG,$DEBUGFOLDER);
 	scanWithConfiguration($oneconf,$DEBUG,$DEBUGFOLDER);
+}
+
+function checkTree($oneconf,$DEBUG,$DEBUGFOLDER)
+{
+	//make directories if they don't exist
+	$mytag=$oneconf['label'];
+	$dirarr=array(
+			"/scripts/LOGBUNNY/data.".$mytag.$DEBUGFOLDER,
+			"/scripts/LOGBUNNY/data.".$mytag.$DEBUGFOLDER."/hits.count",
+			"/scripts/LOGBUNNY/data.".$mytag.$DEBUGFOLDER."/list.white",
+			"/scripts/LOGBUNNY/data.".$mytag.$DEBUGFOLDER."/list.offenders",
+			"/scripts/LOGBUNNY/data.".$mytag.$DEBUGFOLDER."/list.blocked"
+			);
+	foreach ($dirarr as $onedir)
+	{
+		if (!file_exists($onedir))
+		{
+			mkdir($onedir);
+		}
+	}
 }
 
 function scanWithConfiguration($oneconf,$DEBUG,$DEBUGFOLDER)
 {
 	$mytag=$oneconf['label'];
 	$patterns=$oneconf['patterns'];
-	$file=$oneconf['file'];
-	if ($DEBUG==1)
-	{
-		$DEBUGFOLDER=".debug";
-		$mytag=$mytag.".debug";
-	}
+	$file2parse=$oneconf['file'];
+	$threshold=$oneconf['threshold'];
+	$expiryhits=$oneconf['expiryhits'];
 
-	
-	//	to fully reset (make analyzer analyze ALL from scratch:
-	//	rm /var/log/asterisk/security.ana
 	$lasttimestamp="0";
 	$lastline="";
 	$timenow=time();
-	$fp=fopen("/scripts/LOGBUNNY/data".$DEBUGFOLDER."/lastrun".$mytag,"w");
+	$fp=fopen("/scripts/LOGBUNNY/data.".$mytag.$DEBUGFOLDER."/lastrun".$mytag,"w");
 	if ($fp)
 	{
 		fputs($fp,$timenow."\n");
 		fclose($fp);
 	}
 
-	$fp=fopen($file.".done.".$mytag,"r");
+	$fp=fopen($file2parse.".done.".$mytag,"r");
 	$lasttimestamp="0";
+	$lasthash="invalid";
 	if ($fp)
 	{
-		$lasttimestamp=fgets($fp, 4096);
-		$lastline=fgets($fp, 4096);
+		echo "Trying to use saved state from ".$file2parse.".done.\n";
+		$lasttimestamp=trim(fgets($fp, 4096));
+		$lastline=trim(fgets($fp, 4096));
+		$lastlinenumber=trim(fgets($fp, 4096));
+		$lasthash=trim(fgets($fp, 4096));
+		$lastposition=trim(fgets($fp, 4096));
 		fclose($fp);
 	}
 	
 	$inc=0;
-	$fp=fopen($file."","r");
+	$fp=fopen($file2parse,"r");
 	echo "Searching for head...";
 	$timepat="/(?P<timestamp>\S+.\S+.\S+)/";
 
 	$headskip=0;
+	$linenumber=-1;
+	$firshlinehash="";
 	while(!feof($fp))
 	{
+		$linenumber++;
+		$prevPos=ftell($fp);
+		$line = fgets($fp, 4096);
+		if ($linenumber==0)
+		{
+			$hash1stLine=md5($line);
+			echo "hash of first line calculated as $hash1stLine\n";
+		}
+
 		if ($lasttimestamp==0)
 		{
-			//no head cut
+			//no headcut at all
+			//lets rollback so we are ready for line scanning
+			echo "Saved Timestamp not consistent\n";
+			fseek($fp,$prevPos);
 			break;
 		}
-		$line = fgets($fp, 4096);
+
+		if ($linenumber==0)
+		{
+			if ($hash1stLine==$lasthash)
+			{
+				//this is the file meant to be headcut
+				//so we can skip to the saved position
+				$linenumber=$lastlinenumber;
+				fseek($fp,$lastposition);
+				echo "This was the file with saved position -- let's go to byte $lastposition (line $linenumber)\n";
+				break;
+			}
+			else
+			{
+				//not the file meant to headcut in
+				//lets rollback so we are ready for line scanning
+				echo "This was NOT the file we expect by position info as $hash1stLine is not $lasthash -- no headcut at all\n";
+				fseek($fp,$prevPos);
+				$lastline=-1;
+				break;
+			}
+		}
+
 		if (preg_match($timepat,$line,$matches))
 		{
 			$time=strtotime($matches['timestamp']);
-			if ($time>$lasttimestamp) {break;}
-			if ($time==$lasttimestamp && $line==$lastline) {break;}
+			if ($time>$lasttimestamp)
+			{
+				//this line is already after the meant headcut
+				//lets rollback
+				echo "File starts after saved position -- No Headcut at all\n";
+				fseek($fp,$prevPos);
+				$lastline=-1;
+				break;
+			}
+			if ($time==$lasttimestamp && $line==$lastline)
+			{
+				echo "Exact headcut found at $lastline\n";
+				//this line is exactly the last scanned (already scanned)
+				//so lets go to on so that next fgets() will start from next line
+				break;
+			}
 		}
 		else
 		{
@@ -75,8 +156,7 @@ function scanWithConfiguration($oneconf,$DEBUG,$DEBUGFOLDER)
 		$headskip++;
 	}
 	
-	echo "Head found by skipping $headskip\n";
-	$cou=0;
+	echo "After headcut we are at line $linenumber\n";
 	$matched=0;
 /*
 		$pattern1="/(?P<timestamp>\S+.\S+.\S+).\S+.dovecot: auth-worker\(\d+\): (pam|sql)\(\S+,(?P<ip>\S+)\): (Password mismatch|unknown user)/";
@@ -86,9 +166,12 @@ function scanWithConfiguration($oneconf,$DEBUG,$DEBUGFOLDER)
 				$pattern2
 			);
 */
+
+
+//LINE SCANNING STARTS HERE
 	while(!feof($fp))
 	{
-		$cou=$cou+1;
+		$linenumber++;
 		$line = fgets($fp, 4096);
 	//	^%(__prefix_line)sauth-worker\(\d+\): (pam|sql)\(\S+,<HOST>\): (Password mismatch|unknown user)\s*$
 	//	Sep 24 14:37:22 mx01 dovecot: auth-worker(8533): sql(pbologna@sitook.com,178.219.125.21): Password mismatch
@@ -111,12 +194,12 @@ function scanWithConfiguration($oneconf,$DEBUG,$DEBUGFOLDER)
 			$currentpat=-1;
 			//if not matching,
 			//write one timestamp every 1500 lines so that on next run we are not going to rescan
-			if ($cou%1500==0)
+			if ($linenumber%10000==0)
 			{
 				if (preg_match($timepat,$line,$matches))
 				{
 					$time=strtotime($matches['timestamp']);
-					writeLastTimestamp($file,$time,$mytag,$line);
+					writeLastTimestamp($file2parse,$time,$mytag,$line,$linenumber,$hash1stLine,$fp);
 				}
 			}
 			continue;
@@ -131,7 +214,7 @@ function scanWithConfiguration($oneconf,$DEBUG,$DEBUGFOLDER)
 		echo "MATCHED: ".$line."\n";
 		echo "\n\n";
 		$time=strtotime($matches['timestamp']);
-		writeLastTimestamp($file,$time,$mytag,$line);
+		writeLastTimestamp($file2parse,$time,$mytag,$line,$linenumber,$hash1stLine,$fp);
 		print_r($matches);
 		if($DEBUG==1 && $matched==2)
 		{
@@ -154,33 +237,34 @@ function scanWithConfiguration($oneconf,$DEBUG,$DEBUGFOLDER)
 		continue;
 	   }
 	
-	   if (!addHitCount($matches["ip"],$matches["timestamp"],$DEBUGFOLDER))
+	   if (!addHitCount($matches["ip"],$matches["timestamp"],$DEBUGFOLDER,$mytag,$threshold,$expiryhits))
 	   {
 	      // count is not enough - mark new hit and ignore
 	      continue;
 	   }
 	
-	   $fp2=fopen("/scripts/LOGBUNNY/data".$DEBUGFOLDER."/list.offenders/".$matches["ip"],"a+");
+	   $fp2=fopen("/scripts/LOGBUNNY/data.".$mytag.$DEBUGFOLDER."/list.offenders/".$matches["ip"],"a+");
 	   fputs($fp2,$reason);
 	   fclose($fp2);
 	   //print_r($vars);
 	
 	} //end of while
 	fclose($fp);
-	system("/scripts/SECURE_STEP2.sh");
-}
+} // End of scanWithConfiguration
 
-function writeLastTimestamp($file,$time,$mytag,$line)
+function writeLastTimestamp($file2parse,$time,$mytag,$line,$linenumber,$hash1stLine,$fp)
 {
-	echo "marking ".$file.".done.".$mytag." with ".$time." (".date("M-d-Y H:i:s",$time).")\n";
-	$fp=fopen($file.".done.".$mytag,"w");
-	fputs($fp,$time."\n".$line);
+	$line=trim($line);
+	$pos=ftell($fp);
+	echo "marking ".$file2parse.".done.".$mytag." with ".$time." (".date("M-d-Y H:i:s",$time).")\n";
+	$fp=fopen($file2parse.".done.".$mytag,"w");
+	fputs($fp,$time."\n".$line."\n".$linenumber."\n".$hash1stLine."\n".$pos);
 	fclose($fp);
 }
 
 //grep ChallengeSent /var/log/asterisk/security  | grep AccountID=\"sip
 
-function addHitCount($ip,$timestamp,$DEBUGFOLDER)
+function addHitCount($ip,$timestamp,$DEBUGFOLDER,$mytag,$threshold,$expiryhits)
 {
 	$time=strtotime($timestamp);
 	$timenow=time();
@@ -193,7 +277,7 @@ function addHitCount($ip,$timestamp,$DEBUGFOLDER)
 	$linz=array();
 	$arr=array();
 
-	$fname="/scripts/LOGBUNNY/data".$DEBUGFOLDER."/hits.count/".$ip;
+	$fname="/scripts/LOGBUNNY/data.".$mytag.$DEBUGFOLDER."/hits.count/".$ip;
 
 	if (file_exists($fname))
 	{
@@ -206,7 +290,8 @@ function addHitCount($ip,$timestamp,$DEBUGFOLDER)
 	if ($ff)
 	{
 		$lasttime = fgets($ff, 4096);
-		if ($lasttime-$time>1800)
+		//get seconds from last hit - if too much then just mark this one as first hit
+		if ($lasttime-$time>$expiryhits)
 		{
 			$lastcount = 1;
 		}
@@ -223,12 +308,12 @@ function addHitCount($ip,$timestamp,$DEBUGFOLDER)
 		$lastcount=1;
 	}
 
-	echo "Marking new count: /scripts/LOGBUNNY/data".$DEBUGFOLDER."/hits.count/".$ip." :".$lastcount."\n";
-        $ff=fopen("/scripts/LOGBUNNY/data".$DEBUGFOLDER."/hits.count/".$ip,"w");
+	echo "Marking new count: /scripts/LOGBUNNY/data.".$mytag.$DEBUGFOLDER."/hits.count/".$ip." :".$lastcount."\n";
+        $ff=fopen("/scripts/LOGBUNNY/data.".$mytag.$DEBUGFOLDER."/hits.count/".$ip,"w");
 	fputs($ff,$time."\n".$lastcount."\n");
 	fclose($ff);
 
-	if ($lastcount>=10)
+	if ($lastcount>=$configuration[$i]['threshold'])
 	{
 		return true;
 	}
