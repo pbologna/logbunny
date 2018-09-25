@@ -1,6 +1,6 @@
 <?php
 
-//Logbunny v0.88
+//Logbunny v0.881
 //Devs: pbologna at sitook.com -- kirsten at sitook.com
 
 //$mytag="dovecotpostfix";
@@ -313,7 +313,7 @@ function addHitCount($ip,$timestamp,$DEBUGFOLDER,$mytag,$threshold,$expiryhits)
 	fputs($ff,$time."\n".$lastcount."\n");
 	fclose($ff);
 
-	if ($lastcount>=$configuration[$i]['threshold'])
+	if ($lastcount>=$threshold)
 	{
 		return true;
 	}
