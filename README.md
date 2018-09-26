@@ -55,7 +55,7 @@ $configuration[$i]['rblscore']=3;
 <h2>#How it works</h2>
 <p>STEP1 is all about collecting data and building a directory tree at LOGBUNNY/data</p>
 <p>STEP2 is the procedure that moves offenders to the blocked list, executing actions</p>
-<i>At the moment of writing some configurable option is still hardcoded (Ie. threshold and block action).</i>
+<i>At the moment of writing some configurable option is still hardcoded (Ie. path is /scripts/LOGBUNNY).</i>
 
 <pre>
 LOGBUNNY/data
