@@ -1,10 +1,10 @@
 <?php
 
-//Logbunny v0.90
+//Logbunny v0.91
 //Devs: pbologna at sitook.com -- kirsten at sitook.com
 
 //$mytag="dovecotpostfix";
-$DEBUG=0;
+$DEBUG=1;
 $DEBUGFOLDER="";
 include ("config.php");
 
@@ -25,6 +25,7 @@ if ($DEBUG==1)
 foreach ($configuration as $oneconf)
 {
         if ($oneconf['enabled']!==TRUE) {continue;}
+	checkglobal($DEBUG,$DEBUGFOLDER);
 	checkTree($oneconf,$DEBUG,$DEBUGFOLDER);
 	scanWithConfiguration($oneconf,$bunny,$DEBUG,$DEBUGFOLDER);
 }
@@ -32,10 +33,33 @@ foreach ($configuration as $oneconf)
     fflush($lofp);            // flush output before releasing the lock
     flock($lofp, LOCK_UN);    // release the lock
 
+function checkglobal($DEBUG,$DEBUGFOLDER)
+{
+	$dirarr=array(
+			"/scripts/LOGBUNNY/geoip_noscore"
+		);
+	foreach ($dirarr as $onedir)
+	{
+		if (!file_exists($onedir))
+		{
+			mkdir($onedir);
+		}
+	}
+}
+
 function checkTree($oneconf,$DEBUG,$DEBUGFOLDER)
 {
 	//make directories if they don't exist
 	$mytag=$oneconf['label'];
+	if ($geoip=$oneconf['geoipenabled']==TRUE)
+	{
+		$test=function_exists("geoip_record_by_name");
+		if ($test==FALSE)
+		{
+			die("php-geoip required but not installed\nPlease install php-geoip or disable geoipenabled by editing your config.php\n\n");
+		}
+	}
+
 	$dirarr=array(
 			"/scripts/LOGBUNNY/data.".$mytag.$DEBUGFOLDER,
 			"/scripts/LOGBUNNY/data.".$mytag.$DEBUGFOLDER."/hits.count",
@@ -62,6 +86,12 @@ function scanWithConfiguration($oneconf,$bunny,$DEBUG,$DEBUGFOLDER)
 	$maxTimeBack=$bunny['maxTimeBack'];
 	$rblhosts=$bunny['rblhosts'];
 	$rblenabled=$oneconf['rblenabled'];
+	$geoipenabled=$oneconf['geoipenabled'];
+	if (!isset($oneconf['geoipscores']) && isset($bunny['geoipscores']))
+	{
+		$oneconf['geoipscores']=$bunny['geoipscores'];
+	}
+	$geoipscores=$oneconf['geoipscores'];
 	$rblscore=$oneconf['rblscore'];
 	$workablefile=1;
 
@@ -75,12 +105,12 @@ function scanWithConfiguration($oneconf,$bunny,$DEBUG,$DEBUGFOLDER)
 		fclose($fp);
 	}
 
-	$fp=fopen($file2parse.".done.".$mytag,"r");
+	$fp=fopen($file2parse.".done.".$mytag.$DEBUGFOLDER,"r");
 	$lasttimestamp="0";
 	$lasthash="invalid";
 	if ($fp)
 	{
-		echo "Trying to use saved state from ".$file2parse.".done.\n";
+		echo "Trying to use saved state from ".$file2parse.".done.".$mytag.$DEBUGFOLDER."\n";
 		$lasttimestamp=trim(fgets($fp, 4096));
 		$lastline=trim(fgets($fp, 4096));
 		$lastlinenumber=trim(fgets($fp, 4096));
@@ -178,7 +208,7 @@ function scanWithConfiguration($oneconf,$bunny,$DEBUG,$DEBUGFOLDER)
 		}
 		else
 		{
-			// "cant get timestamp at this line - lets skip
+			// "can't get timestamp at this line - lets skip
 			continue;
 		}
 		if ($linenumber%1500==0)
@@ -269,7 +299,7 @@ function scanWithConfiguration($oneconf,$bunny,$DEBUG,$DEBUGFOLDER)
 				if (preg_match($timepat,$line,$matches))
 				{
 					$time=strtotime($matches['timestamp']);
-					writeLastTimestamp($file2parse,$time,$mytag,$line,$linenumber,$hash1stLine,$fp,$timepat,__LINE__);
+					writeLastTimestamp($file2parse,$time,$mytag,$line,$linenumber,$hash1stLine,$fp,$timepat,__LINE__,$DEBUGFOLDER);
 				}
 			}
 			continue;
@@ -284,7 +314,7 @@ function scanWithConfiguration($oneconf,$bunny,$DEBUG,$DEBUGFOLDER)
 		echo "MATCHED: ".$line."\n";
 		echo "\n\n";
 		$time=strtotime($matches['timestamp']);
-		writeLastTimestamp($file2parse,$time,$mytag,$line,$linenumber,$hash1stLine,$fp,$timepat,__LINE__);
+		writeLastTimestamp($file2parse,$time,$mytag,$line,$linenumber,$hash1stLine,$fp,$timepat,__LINE__,$DEBUGFOLDER);
 		print_r($matches);
 		if($DEBUG==1 && $matched==2)
 		{
@@ -299,7 +329,7 @@ function scanWithConfiguration($oneconf,$bunny,$DEBUG,$DEBUGFOLDER)
 		//we have no reason to count
 		continue;
 	   }
-	   if (!addHitCount($matches["ip"],$matches["timestamp"],$DEBUGFOLDER,$mytag,$threshold,$expiryhits,$rblenabled,$rblhosts,$rblscore))
+	   if (!addHitCount($matches["ip"],$matches["timestamp"],$DEBUGFOLDER,$mytag,$threshold,$expiryhits,$rblenabled,$rblhosts,$rblscore,$geoipenabled,$geoipscores))
 	   {
 	      // count is not enough - mark new hit and ignore
 	      continue;
@@ -310,11 +340,11 @@ function scanWithConfiguration($oneconf,$bunny,$DEBUG,$DEBUGFOLDER)
 	   //print_r($vars);
 	} //end of while
 
-	writeLastTimestamp($file2parse,"",$mytag,$lastline,$linenumber,$hash1stLine,$fp,$timepat,__LINE__);
+	writeLastTimestamp($file2parse,"",$mytag,$lastline,$linenumber,$hash1stLine,$fp,$timepat,__LINE__,$DEBUGFOLDER);
 	fclose($fp);
 } // End of scanWithConfiguration
 
-function writeLastTimestamp($file2parse,$time,$mytag,$line,$linenumber,$hash1stLine,$fp,$timepat,$caller)
+function writeLastTimestamp($file2parse,$time,$mytag,$line,$linenumber,$hash1stLine,$fp,$timepat,$caller,$DEBUGFOLDER)
 {
 //	echo "Entering writeLastTimestamp with line=**$line**";
 	if ($time=="")
@@ -326,15 +356,15 @@ function writeLastTimestamp($file2parse,$time,$mytag,$line,$linenumber,$hash1stL
 	}
 	$line=trim($line);
 	$pos=ftell($fp);
-	echo "marking ".$file2parse.".done.".$mytag." with ".$time." (".date("M-d-Y H:i:s",$time).") -- $caller\n";
-	$fp=fopen($file2parse.".done.".$mytag,"w");
+	echo "marking ".$file2parse.".done.".$mytag.$DEBUGFOLDER." with ".$time." (".date("M-d-Y H:i:s",$time).") -- $caller\n";
+	$fp=fopen($file2parse.".done.".$mytag.$DEBUGFOLDER,"w");
 	fputs($fp,$time."\n".$line."\n".$linenumber."\n".$hash1stLine."\n".$pos);
 	fclose($fp);
 }
 
 //grep ChallengeSent /var/log/asterisk/security  | grep AccountID=\"sip
 
-function addHitCount($ip,$timestamp,$DEBUGFOLDER,$mytag,$threshold,$expiryhits,$rblenabled,$rblhosts,$rblscore)
+function addHitCount($ip,$timestamp,$DEBUGFOLDER,$mytag,$threshold,$expiryhits,$rblenabled,$rblhosts,$rblscore,$geoipenabled,$geoipscores)
 {
 	$time=strtotime($timestamp);
 	$timenow=time();
@@ -363,19 +393,37 @@ function addHitCount($ip,$timestamp,$DEBUGFOLDER,$mytag,$threshold,$expiryhits,$
 	if ($rblenabled==TRUE)
 	{
 		$rbl_bad_hits=checkrbl($rblhosts,$rblscore,$ip);
-		$increment=$increment+$rblscore*$rbl_bad_hits;
-		if ($increment>1)
+		$rblinc=$rblscore*$rbl_bad_hits;
+		$increment=$increment+$rblinc;
+		if ($rblinc>0)
 		{
-			echo "Increment became $increment because of rbl\n";
-		}
-		else
+			echo "RBL: Increment became $increment (+".$rblinc.")\n";
+		} else
 		{
-			echo "RBL had no effect on increment\n";
+			echo "RBL: no effect on increment\n";
 		}
 	}
 	else
 	{
 		echo "Skipping RBL check\n";
+	}
+
+	if ($geoipenabled==TRUE)
+	{
+		$geoipinc=checkgeoip($geoipscores,$ip,$time);
+		$increment=$increment+$geoipinc;
+		if ($geoipinc>0)
+		{
+			echo "GEOIP: Increment became $increment (+".$geoipinc.")\n";
+		}
+		else
+		{
+			echo "GEOIP: no effect on increment\n";
+		}
+	}
+	else
+	{
+		echo "GEOIP: check is disabled\n";
 	}
 
 	if ($ff)
@@ -410,6 +458,36 @@ function addHitCount($ip,$timestamp,$DEBUGFOLDER,$mytag,$threshold,$expiryhits,$
 	}
 
 	return false;
+}
+
+function checkgeoip($geoipscores,$ip,$time)
+{
+	$res=geoip_record_by_name($ip);
+	$country_code=$res['country_code'];
+	$found=FALSE;
+	$inc=0;
+	if (isset($geoipscores[$country_code]))
+	{
+		$inc=$geoipscores[$country_code];
+		echo ("GEOIP: using increment for country_code ".$country_code." (+".$inc.")\n");
+		$found=TRUE;
+	}
+	else if (isset($geoipscores['*']))
+	{
+		$inc=$geoipscores['*'];
+		echo ("GEOIP: using default increment (+".$inc.") as this country_code (".$country_code.") doesn't have a specific score\n");
+	}
+	else
+	{
+		echo ("WARNING: GEOIP cannot work like this, it needs at least a default score!\n");
+	}
+	if (!$found)
+	{
+		$gfp=fopen("/scripts/LOGBUNNY/geoip_noscore/".$country_code,"a");
+		fputs($gfp,date("M-d-Y H:i:s",$time));
+		fclose($gfp);
+	}
+	return $inc;
 }
 
 function checkrbl($rblhosts,$rblscore,$ip)

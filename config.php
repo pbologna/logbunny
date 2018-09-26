@@ -1,8 +1,12 @@
 <?php
 
-//Logbunny v0.902
+//Logbunny v0.91
 //Devs: pbologna at sitook.com -- kirsten at sitook.com
 /*
+
+Changelog v0.91:
+- added GEOIP support
+- some minor fix
 
 Changelog v0.902:
 - replaced cbl.abuseat.org with sbl-xbl.spamhaus.org
@@ -18,6 +22,14 @@ $bunny['rblhosts']=array(
 		"sbl-xbl.spamhaus.org"
 	);
 
+$bunny['geoipscores']=array(
+					"*"=>0,
+					"IT"=>0,
+					"BR"=>5,
+					"AL"=>5,
+					"PL"=>5
+					);
+
 $i++;
 $configuration[$i]['label']="dovecotpostfix";
 $configuration[$i]['file']="/var/log/mail.log";
@@ -32,6 +44,16 @@ $configuration[$i]['threshold']=5;
 $configuration[$i]['expiryhits']=3600;
 $configuration[$i]['rblenabled']=TRUE;
 $configuration[$i]['rblscore']=3;
+$configuration[$i]['geoipenabled']=TRUE;
+$configuration[$i]['geoipscores']=array(
+					"*"=>0,
+					"IT"=>0,
+					"BR"=>6,
+					"AL"=>6,
+					"PL"=>6
+					);
+
+
 
 $i++;
 $configuration[$i]['label']="openssh";
@@ -45,6 +67,7 @@ $configuration[$i]['threshold']=5;
 $configuration[$i]['expiryhits']=3600;
 $configuration[$i]['rblenabled']=TRUE;
 $configuration[$i]['rblscore']=3;
+$configuration[$i]['geoipenabled']=TRUE;
 
 
 ?>

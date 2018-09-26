@@ -1,6 +1,6 @@
 <?php
 
-//Logbunny v0.90
+//Logbunny v0.91
 //Devs: pbologna at sitook.com -- kirsten at sitook.com
 
 include("config.php");

@@ -9,6 +9,7 @@
 <li>each single configuration can have its own hit counts, patterns, threshold and actions</li>
 <li>supports RBL and scoring on per-specific-configuration basis. Ie. rblscore is 10 and IP is hit.counted (1) and positive to 4 RBL services, hit.count will be equal to 1+10x4=41.</li>
 <li>support whitelists (global and per-specific-configuration) with pre-command to refresh whitelist via your own API before blocklist is applied</li>
+<li>supports per-country increment hit. Ie. one hit from Brasil can worth +5 as we have no regular customers in Brasil so most likely it's gonna be a bad guy, while one hit from US is most likely legitimate and should not be penalized</li>
 </ul>
 
 <h2>#Configuration</h2>
@@ -20,8 +21,17 @@ $bunny['rebuildglobalwhitelistcommand']="/scripts/rebuild_whitelist.sh";
 $bunny['maxTimeBack']=1800;
 $bunny['rblhosts']=array(
                 "bl.spamcop.net",
-                "cbl.abuseat.org"
+                "sbl-xbl.spamhaus.org"
         );
+
+//global geoip scores to be used when specific configuration doesn't have one
+$bunny['geoipscores']=array(
+                                        "*"=>0,  //no penalty by default
+                                        "IT"=>0, //no penalty for Italy
+                                        "BR"=>5, //+5 penalty for BR
+                                        "AL"=>5, //+5 penalty for AL
+                                        "PL"=>5  //+5 penalty for PL
+                                        );
 
 $i++;
 $configuration[$i]['label']="dovecotpostfix";
@@ -36,6 +46,15 @@ $configuration[$i]['threshold']=10;
 $configuration[$i]['expiryhits']=1800;
 $configuration[$i]['rblenabled']=TRUE;
 $configuration[$i]['rblscore']=3;
+
+//geoip-based penalties for this specific service
+$configuration[$i]['geoipscores']=array(
+                                        "*"=>0,
+                                        "IT"=>0,
+                                        "BR"=>6,
+                                        "AL"=>6,
+                                        "PL"=>6
+                                        );
 
 $i++;
 $configuration[$i]['label']="openssh";
@@ -89,9 +108,11 @@ at development stage LOGBUNNY is at /scripts/LOGBUNNY and this path is still har
 
 <h3>$bunny['rblhosts']</h3> <p>contains RBL host suffixes to scan for</h3>
 
-<h3>$bunny['rebuildglobalwhitelistcommand']</h3> <p>can point to whatever executable to be run just before STEP2 does its action-running work</h3>
+<h3>geoipscores</h3> <p>contains an array of penalties to apply on hits on per-country basis. Ie. one hit from Brasil can worth +5 as we have no regular customers in Brasil -- Thereis a global $bunny['geoipscores'] that applies to whatever configuration has geoipenabled=TRUE and then every configuration may have its own specific geoipscores</p>
 
-<h3>$bunny['maxTimeBack']</h3> <p>is the max amount of seconds we can look in the past, every log line that refers to an earlier time is discarded -- 0 means disabled</h3>
+<h3>$bunny['rebuildglobalwhitelistcommand']</h3> <p>can point to whatever executable to be run just before STEP2 does its action-running work</p>
+
+<h3>$bunny['maxTimeBack']</h3> <p>is the max amount of seconds we can look in the past, every log line that refers to an earlier time is discarded -- 0 means disabled</p>
 
 <h3>hits.count</h3> <p>contains filenames whose name is IP, content is last hit time and number of hits -- when hit number is more than threshold, the file is moved to list.offenders</p>
 
