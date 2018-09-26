@@ -1,12 +1,20 @@
 <?php
 
-//Logbunny v0.89
+//Logbunny v0.90
 //Devs: pbologna at sitook.com -- kirsten at sitook.com
 
 //$mytag="dovecotpostfix";
 $DEBUG=0;
 $DEBUGFOLDER="";
 include ("config.php");
+
+$lofp = fopen("/tmp/logbunny.pid", "w+");
+if (flock($lofp, LOCK_EX | LOCK_NB)) {  // acquire an exclusive lock
+    ftruncate($lofp, 0);      // truncate file
+    fwrite($lofp, "Write something here\n");
+} else {
+    die("Couldn't get the lock!");
+}
 
 if ($DEBUG==1)
 {
@@ -20,6 +28,9 @@ foreach ($configuration as $oneconf)
 	checkTree($oneconf,$DEBUG,$DEBUGFOLDER);
 	scanWithConfiguration($oneconf,$bunny,$DEBUG,$DEBUGFOLDER);
 }
+
+    fflush($lofp);            // flush output before releasing the lock
+    flock($lofp, LOCK_UN);    // release the lock
 
 function checkTree($oneconf,$DEBUG,$DEBUGFOLDER)
 {
@@ -49,6 +60,9 @@ function scanWithConfiguration($oneconf,$bunny,$DEBUG,$DEBUGFOLDER)
 	$threshold=$oneconf['threshold'];
 	$expiryhits=$oneconf['expiryhits'];
 	$maxTimeBack=$bunny['maxTimeBack'];
+	$rblhosts=$bunny['rblhosts'];
+	$rblenabled=$oneconf['rblenabled'];
+	$rblscore=$oneconf['rblscore'];
 	$workablefile=1;
 
 	$lasttimestamp="0";
@@ -285,7 +299,7 @@ function scanWithConfiguration($oneconf,$bunny,$DEBUG,$DEBUGFOLDER)
 		//we have no reason to count
 		continue;
 	   }
-	   if (!addHitCount($matches["ip"],$matches["timestamp"],$DEBUGFOLDER,$mytag,$threshold,$expiryhits))
+	   if (!addHitCount($matches["ip"],$matches["timestamp"],$DEBUGFOLDER,$mytag,$threshold,$expiryhits,$rblenabled,$rblhosts,$rblscore))
 	   {
 	      // count is not enough - mark new hit and ignore
 	      continue;
@@ -320,7 +334,7 @@ function writeLastTimestamp($file2parse,$time,$mytag,$line,$linenumber,$hash1stL
 
 //grep ChallengeSent /var/log/asterisk/security  | grep AccountID=\"sip
 
-function addHitCount($ip,$timestamp,$DEBUGFOLDER,$mytag,$threshold,$expiryhits)
+function addHitCount($ip,$timestamp,$DEBUGFOLDER,$mytag,$threshold,$expiryhits,$rblenabled,$rblhosts,$rblscore)
 {
 	$time=strtotime($timestamp);
 	$timenow=time();
@@ -343,25 +357,46 @@ function addHitCount($ip,$timestamp,$DEBUGFOLDER,$mytag,$threshold,$expiryhits)
 	{
 		$ff=false;
 	}
+
+
+	$increment=1;
+	if ($rblenabled==TRUE)
+	{
+		$rbl_bad_hits=checkrbl($rblhosts,$rblscore,$ip);
+		$increment=$increment+$rblscore*$rbl_bad_hits;
+		if ($increment>1)
+		{
+			echo "Increment became $increment because of rbl\n";
+		}
+		else
+		{
+			echo "RBL had no effect on increment\n";
+		}
+	}
+	else
+	{
+		echo "Skipping RBL check\n";
+	}
+
 	if ($ff)
 	{
 		$lasttime = fgets($ff, 4096);
 		//get seconds from last hit - if too much then just mark this one as first hit
 		if ($lasttime-$time>$expiryhits)
 		{
-			$lastcount = 1;
+			$lastcount = $increment;
 		}
 		else
 		{
 			$lastcount = fgets($ff, 4096);
-			$lastcount = $lastcount+1;
+			$lastcount = $lastcount+$increment;
 			echo "Incrementing count to $lastcount for $ip\n";
 		}
 	        fclose($ff);
 	}
 	else
 	{
-		$lastcount=1;
+		$lastcount=$increment;
 	}
 
 	echo "Marking new count: /scripts/LOGBUNNY/data.".$mytag.$DEBUGFOLDER."/hits.count/".$ip." :".$lastcount."\n";
@@ -375,4 +410,21 @@ function addHitCount($ip,$timestamp,$DEBUGFOLDER,$mytag,$threshold,$expiryhits)
 	}
 
 	return false;
+}
+
+function checkrbl($rblhosts,$rblscore,$ip)
+{
+	$total=0;
+        $reverse_ip = implode(".", array_reverse(explode(".", $ip))); 
+        foreach($rblhosts as $host){
+            if(checkdnsrr($reverse_ip.".".$host.".", "A")){ 
+	    	echo "Checking ".$reverse_ip.".".$host." -- MARKED\n";
+                $total++; 
+            }
+	    else
+	    {
+		echo "Checking ".$reverse_ip.".".$host." -- CLEAN\n";
+	    }
+        }
+	return $total;
 }

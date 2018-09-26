@@ -1,13 +1,27 @@
 <h2>#About</h2>
 <p>logbunny is intended to parse logs and ban (iptables, route, whatever) bruteforce attacks to services like postfix, dovecot, openssh, etc.</p>
 
+<h2>#Features</h2>
+<ul>
+<li>does fast resume of log reading by saving offset position</li>
+<li>does support MaxTimeBack so that one can ignore timestamps before a certain amount of time (for a quick startup!)</li>
+<li>hit counts are stored on per-IP basis and can be analyzed as simple as reading a file</li>
+<li>each single configuration can have its own hit counts, patterns, threshold and actions</li>
+<li>supports RBL and scoring on per-specific-configuration basis. Ie. rblscore is 10 and IP is hit.counted (1) and positive to 4 RBL services, hit.count will be equal to 1+10x4=41.</li>
+<li>support whitelists (global and per-specific-configuration) with pre-command to refresh whitelist via your own API before blocklist is applied</li>
+</ul>
+
 <h2>#Configuration</h2>
-<p>it supports a configuration file (config.php) like this:</p>
+<p>here is an example of configuration file (config.php):</p>
 <pre>
 $i=0;
 
 $bunny['rebuildglobalwhitelistcommand']="/scripts/rebuild_whitelist.sh";
 $bunny['maxTimeBack']=1800;
+$bunny['rblhosts']=array(
+                "bl.spamcop.net",
+                "cbl.abuseat.org"
+        );
 
 $i++;
 $configuration[$i]['label']="dovecotpostfix";
@@ -20,6 +34,8 @@ $configuration[$i]['enabled']=TRUE;
 $configuration[$i]['action']="/bin/ip route add unreachable __IP__";
 $configuration[$i]['threshold']=10;
 $configuration[$i]['expiryhits']=1800;
+$configuration[$i]['rblenabled']=TRUE;
+$configuration[$i]['rblscore']=3;
 
 $i++;
 $configuration[$i]['label']="openssh";
@@ -31,6 +47,9 @@ $configuration[$i]['enabled']=TRUE;
 $configuration[$i]['action']="/bin/ip route add unreachable __IP__";
 $configuration[$i]['threshold']=10;
 $configuration[$i]['expiryhits']=1800;
+$configuration[$i]['rblenabled']=TRUE;
+$configuration[$i]['rblscore']=3;
+
 </pre>
 
 <h2>#How it works</h2>
@@ -63,7 +82,12 @@ LOGBUNNY/data.dovecotpostfix
 LOGBUNNY/data.openssh
     |
    ...
+
+at development stage LOGBUNNY is at /scripts/LOGBUNNY and this path is still hardcoded
+
 </pre>
+
+<h3>$bunny['rblhosts']</h3> <p>contains RBL host suffixes to scan for</h3>
 
 <h3>$bunny['rebuildglobalwhitelistcommand']</h3> <p>can point to whatever executable to be run just before STEP2 does its action-running work</h3>
 
@@ -75,13 +99,17 @@ LOGBUNNY/data.openssh
 
 <h3>list.offenders</h3> <p>contains filenames whose name is IP, this file comes from hits.count (moved from there when hit number is more than threshold) and it is intended to be moved again to list.blocked by the STEP2 procedure, that is also responsable about ignoring white-listed IPs (list.white)</p>
 
-<h3>enabled</h3> <p>is a flag, can be TRUE or FALSE.</p>
+<h3>enabled</h3> <p>is a flag, can be TRUE or FALSE. Disables/enables a specific configuration</p>
 
 <h3>expiryhits</h3> <p>is the max gap in seconds to consider hits together: if you use 1800 and the second hit arrives 1801 seconds after the first, the count will be resetted to 1 as the second hit arrives.</p>
 
 <h3>threshold</h3> <p>is the max number of hits that makes an IP move from hits.count list to list.offenders.</p>
 
 <h3>action</h3> <p>is a string containing the command to be run over list.offenders. The command should contain __IP__ as placeholder for real IP.</p>
+
+<h3>rblenabled</h3> <p>is a flag, can be TRUE or FALSE. Disables/enables RBL for a specific configuration</p>
+
+<h3>rblscore</h3> <p>is an integer. If IP results positive hitcount is incremented by this number multiplied by the number of RBL who reported positive</p>
 
 <h2>#Contacts</h2>
 
