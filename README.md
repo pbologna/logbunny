@@ -15,27 +15,27 @@
 <h2>#Installation</h2>
 <p>here is how to install Logbunny</p>
 <pre>
-# git clone https://github.com/pbologna/logbunny.git /scripts/LOGBUNNY
+$ git clone https://github.com/pbologna/logbunny.git /scripts/LOGBUNNY
 Cloning into 'logbunny'...
 ...
 
 install php5-cli and php5-geoip (if interested into geolocating IPs) if not present -- Debian example:
-# apt-get update
-# apt-get install php5-cli
-# apt-get install php5-geoip
+$ apt-get update
+$ apt-get install php5-cli
+$ apt-get install php5-geoip
 
 make your whitelist like this -- in this example we add 127.0.0.1 and 10.0.0.254 to whitelist:
-# mkdir /scripts/LOGBUNNY/data/list.white
-# touch /scripts/LOGBUNNY/data/list.white/127.0.0.1
-# touch /scripts/LOGBUNNY/data/list.white/10.0.0.254
+$ mkdir /scripts/LOGBUNNY/data/list.white
+$ touch /scripts/LOGBUNNY/data/list.white/127.0.0.1
+$ touch /scripts/LOGBUNNY/data/list.white/10.0.0.254
 
 to check behaviour you may run script to parse logs:
-# cd /scripts/LOGBUNNY
-# php /scripts/LOGBUNNY/SECURE_STEP1.sh
+$ cd /scripts/LOGBUNNY
+$ php /scripts/LOGBUNNY/SECURE_STEP1.sh
 
 to check behaviour you may run script to apply actions:
-# cd /scripts/LOGBUNNY
-# php /scripts/LOGBUNNY/SECURE_STEP2.sh
+$ cd /scripts/LOGBUNNY
+$ php /scripts/LOGBUNNY/SECURE_STEP2.sh
 
 edit /scripts/LOGBUNNY/SECURE_STEP1.sh and check DEBUG variable:
 - DEBUG=1 means we stop parsing after 2 matches
@@ -47,7 +47,7 @@ adding the following suggested lines to /etc/crontab -- scan logs every 2 minute
 */3 *   * * *   root    /scripts/LOGBUNNY/SECURE_STEP2.sh >/dev/null 2>&1
 
 you can check what is being done by tailing logfile!
-tail -f /scripts/LOGBUNNY/log
+$ tail -f /scripts/LOGBUNNY/log
 
 </pre>
 <h2>#Configuration</h2>
