@@ -12,6 +12,44 @@
 <li>supports per-country increment hit. Ie. one hit from Brasil can worth +5 as we have no regular customers in Brasil so most likely it's gonna be a bad guy, while one hit from US is most likely legitimate and should not be penalized</li>
 </ul>
 
+<h2>#Installation</h2>
+<p>here is how to install Logbunny</p>
+<pre>
+# mkdir /tmp/logbunny
+# cd /tmp/logbunny
+# git clone https://github.com/pbologna/logbunny.git
+Cloning into 'logbunny'...
+...
+
+install php5-cli and php5-geoip (if interested into geolocating IPs) if not present -- Debian example:
+# apt-get update
+# apt-get install php5-cli
+# apt-get install php5-geoip
+
+make your whitelist like this -- in this example we add 127.0.0.1 and 10.0.0.254 to whitelist:
+# mkdir /scripts/LOGBUNNY/data/list.white
+# touch /scripts/LOGBUNNY/data/list.white/127.0.0.1
+# touch /scripts/LOGBUNNY/data/list.white/10.0.0.254
+
+to check behaviour you may run script to parse logs:
+php /scripts/LOGBUNNY/SECURE_STEP1.sh
+
+to check behaviour you may run script to apply actions:
+php /scripts/LOGBUNNY/SECURE_STEP2.sh
+
+edit /scripts/LOGBUNNY/SECURE_STEP1.sh and check DEBUG variable:
+- DEBUG=1 means we stop parsing after 2 matches
+- DEBUG=0 means we are in production
+
+whenever you are satisfied you can automatize the run via crontab
+adding the following suggested lines to /etc/crontab -- scan logs every 2 minutes and apply blocks every 3 minutes:
+*/2 *   * * *   root    /scripts/LOGBUNNY/SECURE_STEP1.sh >/dev/null 2>&1
+*/3 *   * * *   root    /scripts/LOGBUNNY/SECURE_STEP2.sh >/dev/null 2>&1
+
+you can check what is being done by tailing logfile!
+tail -f /scripts/LOGBUNNY/log
+
+</pre>
 <h2>#Configuration</h2>
 <p>here is an example of configuration file (config.php):</p>
 <pre>
