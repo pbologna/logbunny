@@ -15,9 +15,7 @@
 <h2>#Installation</h2>
 <p>here is how to install Logbunny</p>
 <pre>
-# mkdir /tmp/logbunny
-# cd /tmp/logbunny
-# git clone https://github.com/pbologna/logbunny.git
+# git clone https://github.com/pbologna/logbunny.git /scripts/LOGBUNNY
 Cloning into 'logbunny'...
 ...
 
@@ -32,10 +30,12 @@ make your whitelist like this -- in this example we add 127.0.0.1 and 10.0.0.254
 # touch /scripts/LOGBUNNY/data/list.white/10.0.0.254
 
 to check behaviour you may run script to parse logs:
-php /scripts/LOGBUNNY/SECURE_STEP1.sh
+# cd /scripts/LOGBUNNY
+# php /scripts/LOGBUNNY/SECURE_STEP1.sh
 
 to check behaviour you may run script to apply actions:
-php /scripts/LOGBUNNY/SECURE_STEP2.sh
+# cd /scripts/LOGBUNNY
+# php /scripts/LOGBUNNY/SECURE_STEP2.sh
 
 edit /scripts/LOGBUNNY/SECURE_STEP1.sh and check DEBUG variable:
 - DEBUG=1 means we stop parsing after 2 matches
