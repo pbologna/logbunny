@@ -128,7 +128,7 @@ function scanWithConfiguration($oneconf,$bunny,$DEBUG,$DEBUGFOLDER)
 		return FALSE;
 	}
 	echo "Searching for head...";
-	$timepat="/(?P<timestamp>\S+.\S+.\S+)/";
+	$timepat="/(?P<timestamp>\S+.{1,2}\S+.\S+)/";
 
 	$headskip=0;
 	$linenumber=-1;
