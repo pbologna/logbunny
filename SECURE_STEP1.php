@@ -4,11 +4,11 @@
 //Devs: pbologna at sitook.com -- kirsten at sitook.com
 
 //$mytag="dovecotpostfix";
-$DEBUG=1;
+$DEBUG=0;
 $DEBUGFOLDER="";
 include ("config.php");
 
-$lofp = fopen("/tmp/logbunny.pid", "w+");
+$lofp = fopen("/tmp/logbunny-STEP1.pid", "w+");
 if (flock($lofp, LOCK_EX | LOCK_NB)) {  // acquire an exclusive lock
     ftruncate($lofp, 0);      // truncate file
     fwrite($lofp, "Write something here\n");
@@ -122,6 +122,11 @@ function scanWithConfiguration($oneconf,$bunny,$DEBUG,$DEBUGFOLDER)
 	$inc=0;
 	$fsize=filesize($file2parse);
 	$fp=fopen($file2parse,"r");
+	if (!$fp)
+	{
+		echo "Skipping ".$file2parse." as it cannot be read\n";
+		return FALSE;
+	}
 	echo "Searching for head...";
 	$timepat="/(?P<timestamp>\S+.\S+.\S+)/";
 
@@ -268,10 +273,6 @@ function scanWithConfiguration($oneconf,$bunny,$DEBUG,$DEBUGFOLDER)
 		{
 			$lastline=$line;
 		}
-	//	echo "while loop with lastline=**$lastline**\n";
-	//	^%(__prefix_line)sauth-worker\(\d+\): (pam|sql)\(\S+,<HOST>\): (Password mismatch|unknown user)\s*$
-	//	Sep 24 14:37:22 mx01 dovecot: auth-worker(8533): sql(pbologna@sitook.com,178.219.125.21): Password mismatch
-
 
 		$foundMatch=0;
 		$currentpat=-1;

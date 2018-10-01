@@ -6,11 +6,22 @@
 include("config.php");
 $DEBUGFOLDER="";
 
+$lofp = fopen("/tmp/logbunny-STEP2.pid", "w+");
+if (flock($lofp, LOCK_EX | LOCK_NB)) {  // acquire an exclusive lock
+    ftruncate($lofp, 0);      // truncate file
+    fwrite($lofp, "Write something here\n");
+} else {
+    die("Couldn't get the lock!");
+}
+
 foreach ($configuration as $oneconf)
 {
         if ($oneconf['enabled']!==TRUE) {continue;}
 	applyActions($oneconf,$DEBUGFOLDER);
 }
+
+    fflush($lofp);            // flush output before releasing the lock
+    flock($lofp, LOCK_UN);    // release the lock
 
 function rebuildGlobalWhitelist()
 {
