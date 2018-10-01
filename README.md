@@ -28,6 +28,12 @@ mybox# mkdir /scripts/LOGBUNNY/data/list.white
 mybox# touch /scripts/LOGBUNNY/data/list.white/127.0.0.1
 mybox# touch /scripts/LOGBUNNY/data/list.white/10.0.0.254
 
+Install default config.php like this:
+mybox# cd /scripts/LOGBUNNY
+mybox# cp config.php.sample config.php
+
+<b>Now edit config.php to suit your needings</b>
+
 to check behaviour you may run script to parse logs:
 mybox# cd /scripts/LOGBUNNY
 mybox# php /scripts/LOGBUNNY/SECURE_STEP1.sh
